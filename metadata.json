@@ -1,0 +1,5 @@
+{
+  "name": "Trace Env - Your Terminal Writes the Docs",
+  "description": "Local-first developer tool that automatically generates reproducible setup documentation by observing terminal workflows.",
+  "requestFramePermissions": []
+}
