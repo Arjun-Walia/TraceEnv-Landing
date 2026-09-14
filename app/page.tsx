@@ -1,728 +1,710 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Terminal, 
-  Cpu, 
-  ShieldCheck, 
-  Zap, 
-  Github, 
-  ArrowRight, 
-  Command, 
-  Database, 
-  Lock, 
-  EyeOff, 
-  Globe, 
+import {
+  Terminal,
+  Cpu,
+  ShieldCheck,
+  Zap,
+  Github,
+  ArrowRight,
+  Command,
+  Database,
+  Lock,
+  EyeOff,
+  Globe,
   Code2,
   Layers,
-  Sparkles,
   CheckCircle2,
-  Copy
+  Copy,
+  Check,
+  Menu,
+  X,
+  ArrowUpRight,
 } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
-// --- Utility ---
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+// ─── Dot grid background (Raycast-style) ──────────────────────────────────────
+const DotGrid = () => (
+  <div
+    className="pointer-events-none fixed inset-0 -z-10"
+    style={{
+      backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)`,
+      backgroundSize: '28px 28px',
+      maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 100%)',
+    }}
+  />
+);
+
+// ─── Animated terminal (compact, Supabase-style) ───────────────────────────────
+const lines = [
+  { cmd: 'git clone https://github.com/acme/project', out: null },
+  { cmd: 'cd project && npm install', out: 'added 847 packages in 12s' },
+  { cmd: 'npm run dev', out: '> ready on http://localhost:3000' },
+];
+
+function AnimatedTerminal() {
+  const [step, setStep] = useState(0);
+  const [charIdx, setCharIdx] = useState(0);
+  const [phase, setPhase] = useState<'typing' | 'output' | 'done'>('typing');
+  const [shown, setShown] = useState<{ cmd: string; out: string | null }[]>([]);
+
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const current = lines[step];
+
+    if (!current) {
+      // restart after pause
+      t = setTimeout(() => {
+        setShown([]);
+        setStep(0);
+        setCharIdx(0);
+        setPhase('typing');
+      }, 3500);
+      return () => clearTimeout(t);
+    }
+
+    if (phase === 'typing') {
+      if (charIdx < current.cmd.length) {
+        t = setTimeout(() => setCharIdx((c) => c + 1), 38);
+      } else {
+        t = setTimeout(() => setPhase('output'), 300);
+      }
+    } else if (phase === 'output') {
+      setShown((s) => [...s, { cmd: current.cmd, out: current.out }]);
+      t = setTimeout(() => {
+        setStep((s) => s + 1);
+        setCharIdx(0);
+        setPhase('typing');
+      }, 700);
+    }
+    return () => clearTimeout(t);
+  }, [step, charIdx, phase]);
+
+  const currentCmd = step < lines.length ? lines[step].cmd.slice(0, charIdx) : '';
+
+  return (
+    <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0d0d0d]">
+      {/* Title bar */}
+      <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.06)] bg-[#111] px-4 py-2.5">
+        <div className="flex gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+        </div>
+        <span className="mx-auto font-mono text-[11px] text-[#444]">traceenv — daemon</span>
+      </div>
+
+      {/* Body */}
+      <div className="min-h-[220px] p-5 font-mono text-[13px] leading-[1.8]">
+        {shown.map((line, i) => (
+          <div key={i}>
+            <div className="flex items-start gap-2">
+              <span className="select-none text-[#3ecf8e]">$</span>
+              <span className="text-[#ccc]">{line.cmd}</span>
+            </div>
+            {line.out && (
+              <div className="ml-4 text-[#555]">{line.out}</div>
+            )}
+          </div>
+        ))}
+
+        {step < lines.length && (
+          <div className="flex items-start gap-2">
+            <span className="select-none text-[#3ecf8e]">$</span>
+            <span className="text-[#ccc]">
+              {currentCmd}
+              {phase === 'typing' && (
+                <motion.span
+                  animate={{ opacity: [1, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.6 }}
+                  className="inline-block h-[14px] w-[2px] translate-y-[2px] bg-[#3ecf8e] align-middle"
+                />
+              )}
+            </span>
+          </div>
+        )}
+
+        {step >= lines.length && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-2 flex items-center gap-2 text-[#3ecf8e]"
+          >
+            <CheckCircle2 size={13} />
+            <span className="text-[12px]">Trace Env captured workflow · Generating docs…</span>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Status bar */}
+      <div className="flex items-center justify-between border-t border-[rgba(255,255,255,0.05)] bg-[#0d0d0d] px-4 py-1.5">
+        <span className="font-mono text-[10px] text-[#333]">traceenv v0.9.0</span>
+        <span className="font-mono text-[10px] text-[#3ecf8e]/60">● watching</span>
+      </div>
+    </div>
+  );
 }
 
-// --- Components ---
-
-const Glow = ({ className }: { className?: string }) => (
-  <motion.div 
-    animate={{ 
-      scale: [1, 1.1, 1],
-      opacity: [0.3, 0.5, 0.3] 
-    }}
-    transition={{ 
-      duration: 8, 
-      repeat: Infinity, 
-      ease: "easeInOut" 
-    }}
-    className={cn("absolute -z-10 h-[400px] w-[600px] rounded-full bg-emerald-500/10 blur-[120px]", className)} 
-  />
-);
-
-const FloatingParticle = ({ delay = 0, xOffset = 0, duration = 5 }: { delay?: number, xOffset?: number, duration?: number }) => (
-  <motion.div
-    initial={{ y: 0, opacity: 0 }}
-    animate={{ 
-      y: [-20, -120], 
-      opacity: [0, 1, 0],
-      x: [0, xOffset]
-    }}
-    transition={{ 
-      duration, 
-      repeat: Infinity, 
-      delay,
-      ease: "linear" 
-    }}
-    className="absolute h-1 w-1 rounded-full bg-emerald-500/40"
-  />
-);
-
-const AnimatedTerminal = () => {
-  const [lines, setLines] = useState<string[]>([]);
-  const [status, setStatus] = useState<'typing' | 'processing' | 'done'>('typing');
-
-  useEffect(() => {
-    const fullText = [
-      "$ git clone https://github.com/acme/project",
-      "$ cd project",
-      "$ npm install",
-      "$ docker-compose up -d",
-      "$ npm run dev",
-    ];
-    
-    let currentLine = 0;
-    let currentChar = 0;
-    let isMounted = true;
-    
-    const type = () => {
-      if (!isMounted) return;
-      if (currentLine < fullText.length) {
-        const line = fullText[currentLine];
-        if (currentChar < line.length) {
-          setLines(prev => {
-            const next = [...prev];
-            next[currentLine] = line.substring(0, currentChar + 1);
-            return next;
-          });
-          currentChar++;
-          // Use a fixed random seed or just a consistent speed
-          setTimeout(type, 50);
-        } else {
-          currentLine++;
-          currentChar = 0;
-          setTimeout(type, 400);
-        }
-      } else {
-        setStatus('processing');
-        setTimeout(() => {
-          if (!isMounted) return;
-          setLines(prev => [...prev, "", "✨ [Trace Env] Workflow captured.", "✨ [Trace Env] Generated setup.sh and README.md"]);
-          setStatus('done');
-          setTimeout(() => {
-            if (!isMounted) return;
-            setLines([]);
-            setStatus('typing');
-            currentLine = 0;
-            currentChar = 0;
-            type();
-          }, 4000);
-        }, 1500);
-      }
-    };
-
-    type();
-    return () => { isMounted = false; };
-  }, []);
+// ─── Copy pill ─────────────────────────────────────────────────────────────────
+function CopyPill({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = useCallback(async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }, [text]);
 
   return (
-    <div className="group relative w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-[#0D0D0D] shadow-[0_0_50px_-12px_rgba(16,185,129,0.25)] transition-all hover:border-emerald-500/30">
-      <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-2">
-        <div className="flex gap-1.5">
-          <div className="h-2.5 w-2.5 rounded-full bg-red-500/40" />
-          <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/40" />
-          <div className="h-2.5 w-2.5 rounded-full bg-green-500/40" />
-        </div>
-        <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 font-mono">bash — traceenv daemon</div>
-        <div className="flex gap-2">
-          {status === 'processing' && (
-            <motion.div 
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-              className="h-3 w-3 rounded-full border-2 border-emerald-500 border-t-transparent"
-            />
-          )}
-          <div className="w-4" />
-        </div>
-      </div>
-      <div className="p-6 font-mono text-sm leading-relaxed text-emerald-400/90 min-h-[280px]">
-        <AnimatePresence mode="popLayout">
-          {lines.map((line, i) => (
-            <motion.div 
-              key={`${i}-${line}`}
-              initial={{ opacity: 0, x: -5 }}
-              animate={{ opacity: 1, x: 0 }}
-              className={cn("flex gap-3", line?.startsWith("✨") && "text-emerald-400 font-bold drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]")}
-            >
-              <span className="select-none text-zinc-700">{line?.startsWith("$") ? "" : ""}</span>
-              <span>{line}</span>
-            </motion.div>
-          ))}
+    <button
+      onClick={copy}
+      className="group flex items-center gap-3 rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#111] px-4 py-2.5 font-mono text-sm text-[#888] transition-colors hover:border-[rgba(255,255,255,0.14)] hover:text-[#ccc]"
+    >
+      <span className="text-[#3ecf8e]">$</span>
+      <span>{text}</span>
+      <span className="ml-2 text-[#444] transition-colors group-hover:text-[#666]">
+        <AnimatePresence mode="wait">
+          {copied
+            ? <motion.span key="c" initial={{ scale: 0.7 }} animate={{ scale: 1 }}><Check size={12} className="text-[#3ecf8e]" /></motion.span>
+            : <motion.span key="u" initial={{ scale: 0.7 }} animate={{ scale: 1 }}><Copy size={12} /></motion.span>
+          }
         </AnimatePresence>
-        {status === 'typing' && (
-          <motion.span
-            animate={{ opacity: [1, 0] }}
-            transition={{ repeat: Infinity, duration: 0.8 }}
-            className="inline-block h-4 w-2 bg-emerald-500 align-middle"
-          />
-        )}
-      </div>
-      
-      {/* Visualizing the "Trace" */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-0 h-full w-1 bg-gradient-to-b from-transparent via-emerald-500/20 to-transparent" />
-        {status === 'processing' && (
-          <motion.div 
-            initial={{ y: "-100%" }}
-            animate={{ y: "100%" }}
-            transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-            className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-transparent via-emerald-500/10 to-transparent"
-          />
-        )}
-      </div>
-    </div>
+      </span>
+    </button>
   );
-};
+}
 
-const FeatureCard = ({ icon: Icon, title, description, className }: { icon: any, title: string, description: string, className?: string }) => (
-  <motion.div 
-    whileHover={{ y: -5 }}
-    className={cn("group relative overflow-hidden rounded-2xl border border-white/5 bg-white/[0.02] p-8 transition-all hover:bg-white/[0.04] hover:border-emerald-500/20", className)}
-  >
-    <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-500 transition-all group-hover:bg-emerald-500 group-hover:text-black group-hover:shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-      <Icon size={24} />
-    </div>
-    <h3 className="mb-2 font-sans text-xl font-bold text-white">{title}</h3>
-    <p className="text-sm leading-relaxed text-zinc-500">{description}</p>
-    
-    {/* Decorative corner */}
-    <div className="absolute top-0 right-0 p-2 opacity-0 transition-opacity group-hover:opacity-100">
-      <ArrowRight size={14} className="text-emerald-500" />
-    </div>
-  </motion.div>
-);
-
-const SectionHeader = ({ badge, title, subtitle }: { badge: string, title: string, subtitle: string }) => (
-  <div className="mb-16 flex flex-col items-center text-center">
-    <motion.span 
-      initial={{ opacity: 0, scale: 0.9 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      className="mb-4 inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-500"
-    >
-      {badge}
-    </motion.span>
-    <motion.h2 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.6 }}
-      className="font-sans text-4xl font-bold tracking-tight text-white md:text-6xl"
-    >
-      {title}
-    </motion.h2>
-    <motion.p 
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.6, delay: 0.1 }}
-      className="mt-6 max-w-2xl text-lg text-zinc-500"
-    >
-      {subtitle}
-    </motion.p>
-  </div>
-);
-
-const ArchitectureStep = ({ icon: Icon, label, active }: { icon: any, label: string, active?: boolean }) => (
-  <div className="flex flex-col items-center gap-4">
-    <motion.div 
-      animate={active ? { 
-        scale: [1, 1.05, 1],
-        borderColor: ["rgba(16,185,129,0.1)", "rgba(16,185,129,0.5)", "rgba(16,185,129,0.1)"]
-      } : {}}
-      transition={{ duration: 2, repeat: Infinity }}
-      className={cn(
-        "relative flex h-16 w-16 items-center justify-center rounded-2xl border transition-all duration-500",
-        active ? "border-emerald-500 bg-emerald-500/10 text-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.3)]" : "border-white/10 bg-white/5 text-zinc-500"
-      )}
-    >
-      <Icon size={24} />
-      {active && (
-        <motion.div 
-          layoutId="active-glow"
-          className="absolute inset-0 rounded-2xl bg-emerald-500/20 blur-xl"
-        />
-      )}
-    </motion.div>
-    <span className={cn("text-[10px] font-bold uppercase tracking-widest transition-colors", active ? "text-emerald-500" : "text-zinc-600")}>
-      {label}
-    </span>
-  </div>
-);
-
-const SynthesisVisualization = () => {
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsSynthesizing(true);
-      setTimeout(() => setIsSynthesizing(false), 3000);
-    }, 6000);
-    return () => clearInterval(interval);
-  }, []);
-
+// ─── Feature row item (Appwrite/Linear style list) ─────────────────────────────
+interface FeatureItemProps { icon: React.ElementType; title: string; desc: string }
+function FeatureItem({ icon: Icon, title, desc }: FeatureItemProps) {
   return (
-    <div className="relative flex h-full w-full items-center justify-center p-8 min-h-[400px]">
-      <div className="grid grid-cols-2 gap-8 w-full">
-        {/* Left: Raw Commands */}
-        <div className="space-y-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 mb-4">Raw Input</div>
-          {[
-            "npm install lodash",
-            "export PORT=3000",
-            "node server.js",
-            "ls -la",
-            "cat .env"
-          ].map((cmd, i) => (
-            <motion.div 
-              key={i}
-              animate={isSynthesizing ? { 
-                x: [0, 100], 
-                opacity: [1, 0],
-                filter: ["blur(0px)", "blur(4px)"]
-              } : {}}
-              transition={{ delay: i * 0.1, duration: 1 }}
-              className="rounded border border-white/5 bg-white/5 p-3 font-mono text-xs text-zinc-400"
-            >
-              {cmd}
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Right: Synthesized Output */}
-        <div className="space-y-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 mb-4">Synthesized Docs</div>
-          <AnimatePresence>
-            {isSynthesizing && (
-              <motion.div 
-                initial={{ opacity: 0, x: -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0 }}
-                className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-6 font-mono text-xs text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.1)]"
-              >
-                <div className="font-bold mb-2"># Environment Setup</div>
-                <div className="text-emerald-500/60 mb-4">Generated by Trace Env v1.0</div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={12} />
-                    <span>Detected Node.js dependency: lodash</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={12} />
-                    <span>Captured ENV: PORT=3000</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 size={12} />
-                    <span>Identified Entry: server.js</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {!isSynthesizing && (
-            <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-white/10 text-zinc-700 text-xs italic">
-              Waiting for workflow...
-            </div>
-          )}
-        </div>
+    <div className="group flex items-start gap-4 rounded-lg border border-transparent px-4 py-4 transition-colors hover:border-[rgba(255,255,255,0.06)] hover:bg-[#111]">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[rgba(62,207,142,0.15)] bg-[rgba(62,207,142,0.05)] text-[#3ecf8e]">
+        <Icon size={15} strokeWidth={1.75} />
       </div>
-
-      {/* Central "Brain" */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <motion.div 
-          animate={isSynthesizing ? { 
-            scale: [1, 1.2, 1],
-            rotate: 360,
-            boxShadow: ["0 0 20px rgba(16,185,129,0.2)", "0 0 60px rgba(16,185,129,0.6)", "0 0 20px rgba(16,185,129,0.2)"]
-          } : {}}
-          transition={{ duration: 1 }}
-          className="flex h-20 w-20 items-center justify-center rounded-full border border-emerald-500 bg-black text-emerald-500"
-        >
-          <Cpu size={32} />
-        </motion.div>
+      <div>
+        <p className="text-[13px] font-semibold tracking-tight text-[#ededed]">{title}</p>
+        <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#666]">{desc}</p>
       </div>
     </div>
   );
-};
+}
 
-// --- Main Page ---
+// ─── Arch node ─────────────────────────────────────────────────────────────────
+function ArchNode({ icon: Icon, label, active }: { icon: React.ElementType; label: string; active: boolean }) {
+  return (
+    <div className="flex flex-col items-center gap-2.5">
+      <div
+        className={cn(
+          'flex h-12 w-12 items-center justify-center rounded-lg border transition-all duration-500',
+          active
+            ? 'border-[#3ecf8e]/40 bg-[#3ecf8e]/8 text-[#3ecf8e] shadow-[0_0_20px_rgba(62,207,142,0.15)]'
+            : 'border-[rgba(255,255,255,0.08)] bg-[#111] text-[#444]'
+        )}
+      >
+        <Icon size={18} strokeWidth={1.5} />
+      </div>
+      <span className={cn('font-mono text-[9px] font-medium uppercase tracking-widest transition-colors', active ? 'text-[#3ecf8e]' : 'text-[#333]')}>
+        {label}
+      </span>
+    </div>
+  );
+}
 
+function ArchConnector() {
+  return (
+    <div className="relative hidden h-px w-12 overflow-hidden bg-[rgba(255,255,255,0.06)] md:block">
+      <motion.div
+        animate={{ x: ['-100%', '100%'] }}
+        transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }}
+        className="absolute inset-y-0 w-6 bg-gradient-to-r from-transparent via-[#3ecf8e]/40 to-transparent"
+      />
+    </div>
+  );
+}
+
+// ─── Section label (Appwrite-style small caps above title) ─────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-[#3ecf8e]">
+      {children}
+    </p>
+  );
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
 export default function TraceEnvLanding() {
   const [activeStep, setActiveStep] = useState(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
-  // Pre-generate random values for particles to keep render pure
-  const particles = React.useMemo(() => {
-    return Array.from({ length: 20 }).map((_, i) => ({
-      id: i,
-      left: `${(i * 7) % 100}%`,
-      top: `${(i * 13) % 100}%`,
-      delay: (i * 0.5) % 5,
-      xOffset: (i * 10) % 40 - 20,
-      duration: 4 + (i % 4)
-    }));
+  useEffect(() => {
+    const t = setInterval(() => setActiveStep((p) => (p + 1) % 5), 2200);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveStep((prev) => (prev + 1) % 5);
-    }, 2000);
-    return () => clearInterval(interval);
+    const fn = () => setScrolled(window.scrollY > 16);
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
   }, []);
 
+  const navLinks = [
+    { label: 'Features', href: '#features' },
+    { label: 'How it works', href: '#how-it-works' },
+    { label: 'Privacy', href: '#privacy' },
+    { label: 'Docs', href: '#' },
+  ];
+
   return (
-    <div className="relative min-h-screen bg-[#0A0A0A] selection:bg-emerald-500/30 selection:text-emerald-200 overflow-x-hidden">
-      {/* Ambient Background */}
-      <div className="fixed inset-0 -z-20 pointer-events-none">
-        <div className="absolute top-0 left-1/4 h-[500px] w-[500px] rounded-full bg-emerald-500/[0.03] blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 h-[500px] w-[500px] rounded-full bg-emerald-500/[0.03] blur-[120px]" />
-        
-        {/* Particle Field */}
-        <div className="absolute inset-0">
-          {particles.map((p) => (
-            <div key={p.id} style={{ left: p.left, top: p.top }}>
-              <FloatingParticle delay={p.delay} xOffset={p.xOffset} duration={p.duration} />
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#0a0a0a] text-[#ededed]" style={{ fontFamily: 'var(--font-sans)' }}>
+      <DotGrid />
 
-      {/* Navbar */}
-      <nav className="fixed top-0 z-50 w-full border-b border-white/5 bg-[#0A0A0A]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.5)]">
-              <Terminal size={18} strokeWidth={3} />
+      {/* ── Nav ──────────────────────────────────────────────────────────────── */}
+      <header className={cn(
+        'fixed top-0 z-50 w-full transition-all duration-200',
+        scrolled ? 'border-b border-[rgba(255,255,255,0.06)] bg-[#0a0a0a]/90 backdrop-blur-md' : ''
+      )}>
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          {/* Logo */}
+          <a href="#" className="flex items-center gap-2.5 group">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#3ecf8e] text-[#020a05]">
+              <Terminal size={13} strokeWidth={2.5} />
             </div>
-            <span className="font-sans text-xl font-bold tracking-tight text-white">Trace Env</span>
-          </motion.div>
-          <div className="hidden items-center gap-8 md:flex">
-            {['Features', 'Architecture', 'Demo', 'Docs'].map((item, i) => (
-              <motion.a 
-                key={item}
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                href={`#${item.toLowerCase()}`} 
-                className="text-sm font-medium text-zinc-400 transition-colors hover:text-white"
-              >
-                {item}
-              </motion.a>
+            <span className="text-[14px] font-semibold tracking-tight text-[#ededed]">Trace Env</span>
+          </a>
+
+          {/* Center links */}
+          <nav className="hidden items-center gap-6 md:flex">
+            {navLinks.map(({ label, href }) => (
+              <a key={label} href={href} className="text-[13px] text-[#666] transition-colors hover:text-[#ccc]">
+                {label}
+              </a>
             ))}
-          </div>
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-4"
-          >
-            <a href="https://github.com" className="hidden text-zinc-400 transition-colors hover:text-white md:block">
-              <Github size={20} />
-            </a>
-            <button className="relative group overflow-hidden rounded-full bg-white px-6 py-2 text-sm font-bold text-black transition-all hover:scale-105 active:scale-95">
-              <span className="relative z-10">Get Started</span>
-              <div className="absolute inset-0 bg-emerald-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-            </button>
-          </motion.div>
-        </div>
-      </nav>
+          </nav>
 
-      <main className="pt-20">
-        {/* Hero Section */}
-        <section className="relative px-6 py-24 md:py-48">
-          <div className="mx-auto flex max-w-7xl flex-col items-center text-center">
+          {/* Right */}
+          <div className="flex items-center gap-3">
+            <a href="https://github.com" target="_blank" rel="noreferrer"
+              className="hidden items-center gap-1.5 text-[13px] text-[#555] transition-colors hover:text-[#ccc] md:flex">
+              <Github size={15} />
+              <span>GitHub</span>
+            </a>
+            <Button size="sm" className="hidden rounded-md bg-[#3ecf8e] px-3 text-[#020a05] hover:bg-[#3ecf8e]/90 md:inline-flex text-[12.5px] font-semibold h-7">
+              Get started
+            </Button>
+            <button onClick={() => setMobileOpen((v) => !v)} className="text-[#555] hover:text-[#ccc] md:hidden">
+              {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {mobileOpen && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-4 py-1.5 text-xs font-bold text-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+              exit={{ opacity: 0, y: -4 }}
+              className="border-t border-[rgba(255,255,255,0.06)] bg-[#0a0a0a] px-6 pb-5 pt-4 md:hidden"
             >
-              <Sparkles size={14} className="animate-pulse" />
-              <span>Local-first Workspace Synthesizer</span>
+              <div className="flex flex-col gap-4">
+                {navLinks.map(({ label, href }) => (
+                  <a key={label} href={href} onClick={() => setMobileOpen(false)}
+                    className="text-[13px] text-[#666] transition-colors hover:text-[#ccc]">{label}</a>
+                ))}
+                <Separator className="bg-[rgba(255,255,255,0.06)]" />
+                <Button size="sm" className="w-full rounded-md bg-[#3ecf8e] text-[#020a05] hover:bg-[#3ecf8e]/90 text-[12.5px] font-semibold">
+                  Get started
+                </Button>
+              </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      <main className="pt-16">
+
+        {/* ── Hero ─────────────────────────────────────────────────────────── */}
+        <section className="relative px-6 pb-24 pt-28 md:pt-36">
+          <div className="mx-auto max-w-6xl">
+            {/* Announcement pill */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+              <a href="#" className="mb-8 inline-flex items-center gap-2 rounded-full border border-[rgba(255,255,255,0.08)] bg-[#111] px-3 py-1 text-[11.5px] text-[#888] transition-colors hover:border-[rgba(255,255,255,0.14)] hover:text-[#ccc]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#3ecf8e]" />
+                Trace Env v0.9 is now open source
+                <ArrowUpRight size={11} className="text-[#555]" />
+              </a>
+            </motion.div>
+
+            {/* Headline */}
             <motion.h1
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.1 }}
-              className="max-w-4xl font-sans text-5xl font-bold tracking-tight text-white md:text-8xl leading-[1.1]"
+              transition={{ duration: 0.5, delay: 0.06 }}
+              className="max-w-3xl text-[48px] font-bold leading-[1.08] tracking-[-0.03em] text-[#ededed] md:text-[64px]"
             >
-              Documentation should be <span className="relative inline-block">
-                <span className="relative z-10 text-emerald-500">executed</span>
-                <motion.div 
-                  initial={{ width: 0 }}
-                  whileInView={{ width: "100%" }}
-                  transition={{ duration: 0.8, delay: 0.5 }}
-                  className="absolute bottom-2 left-0 h-3 bg-emerald-500/20 -z-10"
-                />
-              </span>, not remembered.
+              Your terminal writes{' '}
+              <br className="hidden sm:block" />
+              the docs.
             </motion.h1>
+
             <motion.p
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="mt-8 max-w-2xl text-xl text-zinc-500"
+              transition={{ duration: 0.5, delay: 0.12 }}
+              className="mt-6 max-w-xl text-[16px] leading-[1.7] text-[#666]"
             >
-              Trace Env observes your terminal workflow and automatically generates reproducible setup instructions. No more documentation debt.
+              Trace Env observes your shell sessions and automatically synthesizes
+              reproducible setup docs — no manual work, no documentation debt.
             </motion.p>
-            
+
+            {/* CTAs */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.4 }}
-              className="mt-20 w-full flex justify-center"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
+              className="mt-9 flex flex-wrap items-center gap-3"
+            >
+              <Button className="rounded-md bg-[#3ecf8e] px-5 text-[13px] font-semibold text-[#020a05] hover:bg-[#3ecf8e]/90 h-9">
+                Start for free
+              </Button>
+              <Button variant="outline" className="h-9 rounded-md border-[rgba(255,255,255,0.1)] bg-transparent px-5 text-[13px] text-[#888] hover:border-[rgba(255,255,255,0.16)] hover:bg-[#111] hover:text-[#ccc]">
+                <Github size={14} />
+                View on GitHub
+              </Button>
+            </motion.div>
+
+            {/* Terminal demo */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="mt-16"
             >
               <AnimatedTerminal />
             </motion.div>
           </div>
         </section>
 
-        {/* Problem Section - High Energy Visualization */}
-        <section className="py-24 md:py-48 relative">
-          <div className="mx-auto max-w-7xl px-6">
-            <div className="grid gap-16 md:grid-cols-2 items-center">
-              <div>
-                <motion.h2 
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  className="font-sans text-4xl font-bold text-white md:text-6xl"
-                >
-                  The terminal is your <span className="text-emerald-500">brain dump</span>.
-                </motion.h2>
-                <p className="mt-8 text-xl leading-relaxed text-zinc-500">
-                  Documentation is often the first thing to rot. Trace Env bridges the gap between what you actually did and what you told others to do.
-                </p>
-                <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  {[
-                    { title: "Zero Friction", desc: "No manual logging required." },
-                    { title: "Smart Filter", desc: "Typos are ignored automatically." },
-                    { title: "Local First", desc: "Your commands stay private." },
-                    { title: "Auto Provision", desc: "Detects missing dependencies." }
-                  ].map((item, i) => (
-                    <motion.div 
-                      key={i}
-                      initial={{ opacity: 0, y: 10 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.1 }}
-                      className="p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:border-emerald-500/20 transition-colors"
-                    >
-                      <div className="text-emerald-500 font-bold mb-1">{item.title}</div>
-                      <div className="text-xs text-zinc-600">{item.desc}</div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="relative">
-                <div className="absolute inset-0 bg-emerald-500/10 blur-[100px] rounded-full" />
-                <div className="relative rounded-[2rem] border border-white/10 bg-black/40 p-2 overflow-hidden shadow-2xl">
-                  <SynthesisVisualization />
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Feature Grid */}
-        <section id="features" className="relative py-24 md:py-48">
-          <div className="mx-auto max-w-7xl px-6">
-            <SectionHeader 
-              badge="Features"
-              title="Everything you need, nothing you don't."
-              subtitle="Trace Env is built for speed, privacy, and accuracy. No cloud, no fluff, just reproducible environments."
-            />
-            
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              <FeatureCard 
-                icon={Cpu}
-                title="Local AI Processing"
-                description="Runs fully offline using llama.cpp. Your code and commands never leave your machine."
-              />
-              <FeatureCard 
-                icon={Terminal}
-                title="Workflow Observation"
-                description="Passive observation of shell activity. No manual logging or tracking required."
-              />
-              <FeatureCard 
-                icon={Zap}
-                title="Noise Filtering"
-                description="Smartly filters out typos, failed commands, and irrelevant activity to keep docs clean."
-              />
-              <FeatureCard 
-                icon={Code2}
-                title="Auto Documentation"
-                description="Generates README.md, setup.sh, and Dockerfiles based on your actual workflow."
-              />
-              <FeatureCard 
-                icon={Layers}
-                title="Auto Provisioning"
-                description="Reconstructs environment variables and system dependencies automatically."
-              />
-              <FeatureCard 
-                icon={Database}
-                title="SQLite Backed"
-                description="All captured data is stored in a local SQLite database for easy auditing and export."
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* Architecture Visualization - Animated Flow */}
-        <section id="architecture" className="relative py-24 md:py-48 bg-white/[0.01]">
-          <div className="mx-auto max-w-7xl px-6">
-            <SectionHeader 
-              badge="Architecture"
-              title="Built for the local era."
-              subtitle="Trace Env is a lightweight daemon that coordinates between your shell and local intelligence."
-            />
-
-            <div className="relative flex flex-col items-center justify-center gap-12 md:flex-row md:gap-20">
-              <ArchitectureStep icon={Terminal} label="Shell" active={activeStep === 0} />
-              <div className="relative h-12 w-px md:h-px md:w-20 bg-white/10 overflow-hidden">
-                <motion.div 
-                  animate={{ x: ["-100%", "100%"] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="absolute inset-0 bg-emerald-500/40"
-                />
-              </div>
-              <ArchitectureStep icon={Command} label="Daemon" active={activeStep === 1} />
-              <div className="relative h-12 w-px md:h-px md:w-20 bg-white/10 overflow-hidden">
-                <motion.div 
-                  animate={{ x: ["-100%", "100%"] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="absolute inset-0 bg-emerald-500/40"
-                />
-              </div>
-              <ArchitectureStep icon={Database} label="SQLite" active={activeStep === 2} />
-              <div className="relative h-12 w-px md:h-px md:w-20 bg-white/10 overflow-hidden">
-                <motion.div 
-                  animate={{ x: ["-100%", "100%"] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="absolute inset-0 bg-emerald-500/40"
-                />
-              </div>
-              <ArchitectureStep icon={Cpu} label="Local LLM" active={activeStep === 3} />
-              <div className="relative h-12 w-px md:h-px md:w-20 bg-white/10 overflow-hidden">
-                <motion.div 
-                  animate={{ x: ["-100%", "100%"] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                  className="absolute inset-0 bg-emerald-500/40"
-                />
-              </div>
-              <ArchitectureStep icon={Code2} label="Docs" active={activeStep === 4} />
-            </div>
-          </div>
-        </section>
-
-        {/* Privacy Section - High Energy Icons */}
-        <section className="relative overflow-hidden py-24 md:py-48">
-          <div className="mx-auto max-w-7xl px-6 text-center">
-            <motion.div 
-              initial={{ scale: 0.8, opacity: 0 }}
-              whileInView={{ scale: 1, opacity: 1 }}
-              viewport={{ once: true }}
-              className="mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-3xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-500 shadow-[0_0_40px_rgba(16,185,129,0.1)]"
-            >
-              <ShieldCheck size={48} />
-            </motion.div>
-            <h2 className="font-sans text-4xl font-bold text-white md:text-6xl">Your data stays yours.</h2>
-            <p className="mx-auto mt-8 max-w-2xl text-xl text-zinc-500">
-              Trace Env is built on the principle of local-first computing. We don&apos;t want your data, and we&apos;ve designed the system so we can&apos;t even see it.
+        {/* ── Logos strip / social proof ────────────────────────────────────── */}
+        <section className="border-y border-[rgba(255,255,255,0.05)] py-8">
+          <div className="mx-auto max-w-6xl px-6">
+            <p className="mb-6 text-center font-mono text-[10px] uppercase tracking-widest text-[#333]">
+              Built for teams at
             </p>
-            <div className="mt-16 grid gap-8 md:grid-cols-3">
-              {[
-                { icon: Lock, title: "No Cloud APIs", desc: "Everything happens on your machine. No external requests." },
-                { icon: EyeOff, title: "No Telemetry", desc: "We don't track usage, commands, or identity. Zero tracking." },
-                { icon: Globe, title: "Offline First", desc: "Works perfectly without an internet connection." }
-              ].map((item, i) => (
-                <motion.div 
-                  key={i}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  whileHover={{ scale: 1.02 }}
-                  className="rounded-2xl border border-white/5 bg-white/[0.02] p-8 hover:border-emerald-500/20 transition-all"
-                >
-                  <item.icon size={32} className="mx-auto mb-4 text-emerald-500" />
-                  <h4 className="mb-2 font-bold text-white">{item.title}</h4>
-                  <p className="text-sm text-zinc-500">{item.desc}</p>
-                </motion.div>
+            <div className="flex flex-wrap items-center justify-center gap-8 opacity-30">
+              {['Acme Corp', 'Staging.sh', 'Buildkite', 'Depot', 'Fly.io', 'Railway'].map((name) => (
+                <span key={name} className="font-mono text-[12px] font-medium tracking-tight text-[#ccc]">
+                  {name}
+                </span>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Final CTA - High Energy Installation */}
-        <section className="py-24 md:py-48">
-          <div className="mx-auto max-w-7xl px-6">
-            <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent px-8 py-24 text-center md:px-20">
-              <Glow className="top-0 left-1/2 -translate-x-1/2 opacity-40" />
-              <motion.h2 
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                className="font-sans text-5xl font-bold text-white md:text-7xl"
-              >
-                Install Trace Env today.
-              </motion.h2>
-              <p className="mx-auto mt-8 max-w-xl text-lg text-zinc-500">
-                Join thousands of developers who have eliminated documentation debt.
-              </p>
-              <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <motion.div 
-                  whileHover={{ scale: 1.02 }}
-                  className="flex items-center gap-3 rounded-full border border-white/10 bg-black/40 px-6 py-3 font-mono text-sm text-white shadow-2xl"
-                >
-                  <span className="text-emerald-500 font-bold">$</span>
-                  <span>npm install -g traceenv</span>
-                  <button className="ml-2 text-zinc-500 hover:text-white transition-colors">
-                    <Copy size={14} />
-                  </button>
-                </motion.div>
-                <button className="group relative flex items-center gap-2 overflow-hidden rounded-full bg-emerald-500 px-8 py-3.5 text-sm font-bold text-black transition-transform hover:scale-105 active:scale-95">
-                  <span className="relative z-10 flex items-center gap-2">Get Started <ArrowRight size={16} /></span>
-                  <div className="absolute inset-0 bg-white translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-                </button>
+        {/* ── How it works ──────────────────────────────────────────────────── */}
+        <section id="how-it-works" className="py-24 md:py-32">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="grid gap-16 md:grid-cols-2 md:items-center">
+              {/* Left */}
+              <div>
+                <SectionLabel>The problem</SectionLabel>
+                <h2 className="text-[32px] font-bold leading-[1.1] tracking-[-0.025em] text-[#ededed] md:text-[40px]">
+                  Documentation rots.
+                  <br />
+                  Workflows don't.
+                </h2>
+                <p className="mt-5 text-[15px] leading-[1.75] text-[#666]">
+                  Every engineer has a graveyard of READMEs that don&apos;t match reality.
+                  Trace Env captures what actually happened in your terminal and turns it
+                  into docs that work.
+                </p>
+
+                <div className="mt-10 space-y-1">
+                  {[
+                    { icon: Zap, title: 'Zero overhead', desc: 'Passive shell hook — nothing to remember.' },
+                    { icon: ShieldCheck, title: 'Private by design', desc: 'All data stays on your machine, always.' },
+                    { icon: Code2, title: 'Smart synthesis', desc: 'Typos and failed commands are filtered out automatically.' },
+                    { icon: Layers, title: 'Full stack aware', desc: 'Detects env vars, deps, and service configs.' },
+                  ].map((f) => (
+                    <FeatureItem key={f.title} {...f} />
+                  ))}
+                </div>
               </div>
-              <div className="mt-16 flex items-center justify-center gap-8 opacity-50 grayscale hover:grayscale-0 transition-all cursor-pointer">
-                <Github size={24} />
-                <span className="font-sans font-bold">Open Source</span>
+
+              {/* Right — synthesis card */}
+              <div className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#111] overflow-hidden">
+                <div className="border-b border-[rgba(255,255,255,0.05)] px-5 py-3">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">Live synthesis</p>
+                </div>
+                <SynthesisDemo />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features grid ─────────────────────────────────────────────────── */}
+        <section id="features" className="border-t border-[rgba(255,255,255,0.05)] py-24 md:py-32">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mb-14">
+              <SectionLabel>Features</SectionLabel>
+              <h2 className="text-[32px] font-bold leading-[1.1] tracking-[-0.025em] text-[#ededed] md:text-[40px]">
+                Everything you need.
+                <br />
+                Nothing you don&apos;t.
+              </h2>
+            </div>
+
+            <div className="grid gap-px rounded-xl border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.04)] overflow-hidden sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                { icon: Cpu, title: 'Local AI', desc: 'Runs on llama.cpp. No data ever leaves your machine.' },
+                { icon: Terminal, title: 'Shell observer', desc: 'Hooks into your shell at the process level. Zero friction.' },
+                { icon: Zap, title: 'Noise filter', desc: 'Typos, failed commands, irrelevant noise — all removed.' },
+                { icon: Code2, title: 'Auto docs', desc: 'Generates README.md, setup.sh, and Dockerfile automatically.' },
+                { icon: Database, title: 'SQLite storage', desc: 'All captured data in a local DB. Fully auditable, exportable.' },
+                { icon: ShieldCheck, title: 'Air-gapped', desc: 'Works offline. No network required after install.' },
+              ].map((f, i) => (
+                <div
+                  key={i}
+                  className="group flex flex-col gap-4 bg-[#0a0a0a] p-7 transition-colors hover:bg-[#0f0f0f]"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md border border-[rgba(62,207,142,0.15)] bg-[rgba(62,207,142,0.05)] text-[#3ecf8e]">
+                    <f.icon size={16} strokeWidth={1.75} />
+                  </div>
+                  <div>
+                    <p className="text-[13.5px] font-semibold tracking-tight text-[#ededed]">{f.title}</p>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#555]">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Architecture ──────────────────────────────────────────────────── */}
+        <section className="border-t border-[rgba(255,255,255,0.05)] py-24 md:py-32">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mb-14 text-center">
+              <SectionLabel>Architecture</SectionLabel>
+              <h2 className="text-[32px] font-bold leading-[1.1] tracking-[-0.025em] text-[#ededed] md:text-[40px]">
+                Built for the local era.
+              </h2>
+              <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-[#555]">
+                A lightweight background daemon — no servers, no subscriptions.
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center justify-center gap-4 md:flex-row md:gap-0">
+              {[
+                { icon: Terminal, label: 'Shell' },
+                { icon: Command, label: 'Daemon' },
+                { icon: Database, label: 'SQLite' },
+                { icon: Cpu, label: 'LLM' },
+                { icon: Code2, label: 'Output' },
+              ].map((node, i) => (
+                <React.Fragment key={i}>
+                  <ArchNode icon={node.icon} label={node.label} active={activeStep === i} />
+                  {i < 4 && <ArchConnector />}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Privacy ───────────────────────────────────────────────────────── */}
+        <section id="privacy" className="border-t border-[rgba(255,255,255,0.05)] py-24 md:py-32">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="grid gap-12 md:grid-cols-2 md:items-center">
+              <div>
+                <SectionLabel>Privacy</SectionLabel>
+                <h2 className="text-[32px] font-bold leading-[1.1] tracking-[-0.025em] text-[#ededed] md:text-[40px]">
+                  Your data stays yours.
+                  <br />
+                  Full stop.
+                </h2>
+                <p className="mt-5 text-[15px] leading-[1.75] text-[#666]">
+                  Trace Env is built local-first. We haven&apos;t designed a way to access
+                  your data — because we don&apos;t want to.
+                </p>
+
+                <div className="mt-10 flex flex-col gap-4">
+                  {[
+                    { icon: Lock, title: 'No cloud APIs', desc: 'Every computation runs on your hardware.' },
+                    { icon: EyeOff, title: 'No telemetry', desc: 'Zero tracking of usage, identity, or commands.' },
+                    { icon: Globe, title: 'Offline-first', desc: 'Fully functional with no internet connection.' },
+                  ].map((item) => (
+                    <div key={item.title} className="flex items-start gap-4">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-[rgba(62,207,142,0.15)] bg-[rgba(62,207,142,0.05)] text-[#3ecf8e]">
+                        <item.icon size={14} strokeWidth={1.75} />
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-[#ededed]">{item.title}</p>
+                        <p className="text-[12.5px] text-[#555]">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Privacy visual */}
+              <div className="flex flex-col gap-3 rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#111] p-6">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#444]">Data flow</p>
+                {[
+                  { from: 'Shell session', to: 'Trace Env daemon', local: true },
+                  { from: 'Daemon', to: 'SQLite DB', local: true },
+                  { from: 'SQLite DB', to: 'Local LLM', local: true },
+                  { from: 'Local LLM', to: 'Generated docs', local: true },
+                ].map((row, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[12px]">
+                    <span className="font-mono text-[#555]">{row.from}</span>
+                    <ArrowRight size={11} className="shrink-0 text-[#333]" />
+                    <span className="font-mono text-[#555]">{row.to}</span>
+                    <span className="ml-auto rounded-full border border-[rgba(62,207,142,0.2)] bg-[rgba(62,207,142,0.05)] px-2 py-0.5 font-mono text-[9px] text-[#3ecf8e]">local</span>
+                  </div>
+                ))}
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-dashed border-[rgba(255,255,255,0.06)] p-3">
+                  <Globe size={12} className="text-[#333]" />
+                  <span className="text-[11.5px] text-[#444]">Internet</span>
+                  <span className="ml-auto font-mono text-[10px] text-[#3a3a3a] line-through">never accessed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── CTA ───────────────────────────────────────────────────────────── */}
+        <section className="border-t border-[rgba(255,255,255,0.05)] py-24 md:py-32">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="rounded-xl border border-[rgba(255,255,255,0.07)] bg-[#111] px-10 py-16 md:px-16">
+              <div className="max-w-xl">
+                <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.15em] text-[#3ecf8e]">Get started</p>
+                <h2 className="text-[32px] font-bold leading-[1.1] tracking-[-0.025em] text-[#ededed] md:text-[44px]">
+                  Set it up in 30 seconds.
+                </h2>
+                <p className="mt-4 text-[15px] leading-relaxed text-[#666]">
+                  Install the daemon, activate the shell hook, and Trace Env starts working immediately.
+                </p>
+
+                <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <CopyPill text="npm install -g traceenv" />
+                  <Button className="h-10 rounded-md bg-[#3ecf8e] px-6 text-[13px] font-semibold text-[#020a05] hover:bg-[#3ecf8e]/90">
+                    Read the docs <ArrowRight size={13} />
+                  </Button>
+                </div>
+
+                <p className="mt-6 text-[12px] text-[#444]">
+                  Free and open source · MIT License ·{' '}
+                  <a href="https://github.com" className="text-[#555] underline underline-offset-2 hover:text-[#888]">
+                    github.com/traceenv
+                  </a>
+                </p>
               </div>
             </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-white/5 py-12">
-        <div className="mx-auto max-w-7xl px-6">
-          <div className="flex flex-col items-center justify-between gap-8 md:flex-row">
+      {/* ── Footer ───────────────────────────────────────────────────────────── */}
+      <footer className="border-t border-[rgba(255,255,255,0.05)] py-10">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-center">
+            {/* Brand */}
             <div className="flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded bg-emerald-500 text-black">
-                <Terminal size={14} strokeWidth={3} />
+              <div className="flex h-5 w-5 items-center justify-center rounded bg-[#3ecf8e] text-[#020a05]">
+                <Terminal size={11} strokeWidth={2.5} />
               </div>
-              <span className="font-sans font-bold text-white">Trace Env</span>
+              <span className="text-[13px] font-semibold text-[#ededed]">Trace Env</span>
             </div>
-            <div className="flex gap-8 text-sm text-zinc-500">
-              {['Twitter', 'GitHub', 'Discord', 'Privacy'].map(item => (
-                <a key={item} href="#" className="transition-colors hover:text-white">{item}</a>
+
+            {/* Footer links */}
+            <div className="flex flex-wrap gap-6 text-[12.5px] text-[#444]">
+              {['Changelog', 'GitHub', 'Discord', 'Twitter', 'Privacy'].map((item) => (
+                <a key={item} href="#" className="transition-colors hover:text-[#888]">
+                  {item}
+                </a>
               ))}
             </div>
-            <p className="text-sm text-zinc-600">
-              © 2026 Trace Env. Built for developers.
-            </p>
+
+            <p className="text-[11.5px] text-[#333]">© 2026 Trace Env, Inc.</p>
           </div>
         </div>
       </footer>
+    </div>
+  );
+}
+
+// ─── Synthesis demo (inside the "How it works" card) ───────────────────────────
+function SynthesisDemo() {
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setActive(true);
+      setTimeout(() => setActive(false), 3200);
+    }, 6000);
+    setActive(true);
+    setTimeout(() => setActive(false), 3200);
+    return () => clearInterval(t);
+  }, []);
+
+  const raw = ['npm install express', 'export PORT=3000', 'node index.js'];
+
+  return (
+    <div className="grid grid-cols-2 divide-x divide-[rgba(255,255,255,0.05)]">
+      {/* Left — raw */}
+      <div className="p-5">
+        <p className="mb-4 font-mono text-[9px] uppercase tracking-widest text-[#333]">Raw input</p>
+        <div className="space-y-2">
+          {raw.map((cmd, i) => (
+            <motion.div
+              key={i}
+              animate={active ? { opacity: 0.3, x: 6 } : { opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.07, duration: 0.6 }}
+              className="rounded border border-[rgba(255,255,255,0.05)] bg-[#0a0a0a] px-3 py-2 font-mono text-[11.5px] text-[#555]"
+            >
+              {cmd}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Right — synthesized */}
+      <div className="p-5">
+        <p className="mb-4 font-mono text-[9px] uppercase tracking-widest text-[#3ecf8e]">Synthesized</p>
+        <AnimatePresence mode="wait">
+          {active ? (
+            <motion.div
+              key="result"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="rounded border border-[rgba(62,207,142,0.18)] bg-[rgba(62,207,142,0.04)] p-4 font-mono text-[11.5px]"
+            >
+              <p className="mb-2 font-bold text-[#3ecf8e]"># Setup</p>
+              {[
+                '✓ Dep: express',
+                '✓ ENV: PORT=3000',
+                '✓ Entry: index.js',
+              ].map((line, i) => (
+                <p key={i} className="text-[#3ecf8e]/70">{line}</p>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex h-28 items-center justify-center rounded border border-dashed border-[rgba(255,255,255,0.05)] text-[11px] text-[#2a2a2a]"
+            >
+              waiting…
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
